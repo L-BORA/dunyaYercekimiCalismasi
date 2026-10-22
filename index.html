@@ -1,0 +1,311 @@
+<!doctype html>
+<html lang="tr">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover"
+    />
+    <title>Dünya yerçekimi çalışması</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #05070f;
+        --fg: #e8ecf6;
+        --mut: #8b94ad;
+        box-sizing: border-box;
+        padding-top: env(safe-area-inset-top, 0px);
+        padding-bottom: env(safe-area-inset-bottom, 0px);
+      }
+      html,
+      body {
+        height: 100%;
+        margin: 0;
+        background: var(--bg);
+        color: var(--fg);
+        font-family:
+          system-ui,
+          -apple-system,
+          "Segoe UI",
+          sans-serif;
+        overflow: hidden;
+      }
+      header {
+        position: absolute;
+        left: 0;
+        right: 0;
+        top: env(safe-area-inset-top, 0px);
+        padding: 14px 18px;
+        pointer-events: none;
+        z-index: 2;
+      }
+      h1 {
+        margin: 0;
+        font-size: 20px;
+        font-weight: 600;
+      }
+      header p {
+        margin: 4px 0 0;
+        font-size: 13px;
+        color: var(--mut);
+      }
+      svg {
+        display: block;
+        margin: 0 auto;
+        cursor: grab;
+        touch-action: none;
+      }
+      svg.drag {
+        cursor: grabbing;
+      }
+      .c {
+        stroke: #0b1020;
+        stroke-width: 0.5;
+        transition: fill 0.12s;
+      }
+      .c:hover {
+        fill: #fff !important;
+        stroke: #fff;
+      }
+      #tip {
+        position: fixed;
+        pointer-events: none;
+        background: rgba(15, 20, 40, 0.95);
+        border: 1px solid #2a3558;
+        border-radius: 10px;
+        padding: 8px 12px;
+        font-size: 13px;
+        display: none;
+        z-index: 5;
+        white-space: nowrap;
+      }
+      #tip b {
+        display: block;
+        font-size: 14px;
+      }
+      #tip span {
+        font-size: 20px;
+        font-weight: 700;
+        color: #fbbf24;
+      }
+      #leg {
+        position: absolute;
+        left: 50%;
+        transform: translateX(-50%);
+        bottom: calc(14px + env(safe-area-inset-bottom, 0px));
+        font-size: 12px;
+        color: var(--mut);
+        text-align: center;
+        z-index: 2;
+        width: min(320px, 80%);
+      }
+      #bar {
+        height: 8px;
+        border-radius: 4px;
+        background: linear-gradient(90deg, #3b82f6, #f59e0b);
+        margin: 4px 0;
+      }
+      #bar + div {
+        display: flex;
+        justify-content: space-between;
+      }
+      #err {
+        display: none;
+        padding: 80px 20px;
+        text-align: center;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>Dünya yerçekimi çalışması</h1>
+      <p>Küreyi sürükle, bir ülkenin üzerine gel.</p>
+    </header>
+    <div id="err">Harita verisi yüklenemedi.</div>
+    <div id="tip"></div>
+    <div id="leg">
+      Yerçekimi ivmesi (m/s²)
+      <div id="bar"></div>
+      <div><span>9.780 (ekvator)</span><span>9.832 (kutuplar)</span></div>
+    </div>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/3.5.17/d3.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/topojson/1.6.9/topojson.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/datamaps@0.5.9/dist/datamaps.world.min.js"></script>
+    <script>
+      (function () {
+        var topo = window.Datamap && Datamap.prototype.worldTopo;
+        if (!topo) {
+          document.getElementById("err").style.display = "block";
+          return;
+        }
+        var feats = topojson
+          .feature(topo, topo.objects.world)
+          .features.filter(function (f) {
+            return f.id !== "-99" || f.properties.name;
+          });
+        var rad = Math.PI / 180;
+        // ISO3 kodu -> Türkçe ülke adı
+        var TR = {};
+        "AFG:Afganistan,ALB:Arnavutluk,DZA:Cezayir,AGO:Angola,ATA:Antarktika,ARG:Arjantin,ARM:Ermenistan,AUS:Avustralya,AUT:Avusturya,AZE:Azerbaycan,BHS:Bahamalar,BGD:Bangladeş,BLR:Belarus,BEL:Belçika,BLZ:Belize,BEN:Benin,BTN:Butan,BOL:Bolivya,BIH:Bosna-Hersek,BWA:Botsvana,BRA:Brezilya,BRN:Brunei,BGR:Bulgaristan,BFA:Burkina Faso,BDI:Burundi,KHM:Kamboçya,CMR:Kamerun,CAN:Kanada,CAF:Orta Afrika Cumhuriyeti,TCD:Çad,CHL:Şili,CHN:Çin,COL:Kolombiya,COG:Kongo Cumhuriyeti,COD:Kongo Demokratik Cumhuriyeti,CRI:Kosta Rika,CIV:Fildişi Sahili,HRV:Hırvatistan,CUB:Küba,CYP:Kıbrıs,CZE:Çekya,DNK:Danimarka,DJI:Cibuti,DOM:Dominik Cumhuriyeti,ECU:Ekvador,EGY:Mısır,SLV:El Salvador,GNQ:Ekvator Ginesi,ERI:Eritre,EST:Estonya,ETH:Etiyopya,FLK:Falkland Adaları,FJI:Fiji,FIN:Finlandiya,FRA:Fransa,GUF:Fransız Guyanası,ATF:Fransız Güney Toprakları,GAB:Gabon,GMB:Gambiya,GEO:Gürcistan,DEU:Almanya,GHA:Gana,GRC:Yunanistan,GRL:Grönland,GTM:Guatemala,GIN:Gine,GNB:Gine-Bissau,GUY:Guyana,HTI:Haiti,HND:Honduras,HUN:Macaristan,ISL:İzlanda,IND:Hindistan,IDN:Endonezya,IRN:İran,IRQ:Irak,IRL:İrlanda,ISR:İsrail,ITA:İtalya,JAM:Jamaika,JPN:Japonya,JOR:Ürdün,KAZ:Kazakistan,KEN:Kenya,KOR:Güney Kore,PRK:Kuzey Kore,XKX:Kosova,KWT:Kuveyt,KGZ:Kırgızistan,LAO:Laos,LVA:Letonya,LBN:Lübnan,LSO:Lesotho,LBR:Liberya,LBY:Libya,LTU:Litvanya,LUX:Lüksemburg,MKD:Kuzey Makedonya,MDG:Madagaskar,MWI:Malavi,MYS:Malezya,MLI:Mali,MRT:Moritanya,MEX:Meksika,MDA:Moldova,MNG:Moğolistan,MNE:Karadağ,MAR:Fas,MOZ:Mozambik,MMR:Myanmar,NAM:Namibya,NPL:Nepal,NLD:Hollanda,NCL:Yeni Kaledonya,NZL:Yeni Zelanda,NIC:Nikaragua,NER:Nijer,NGA:Nijerya,NOR:Norveç,OMN:Umman,PAK:Pakistan,PAN:Panama,PNG:Papua Yeni Gine,PRY:Paraguay,PER:Peru,PHL:Filipinler,POL:Polonya,PRT:Portekiz,PRI:Porto Riko,QAT:Katar,ROU:Romanya,RUS:Rusya,RWA:Ruanda,SAU:Suudi Arabistan,SEN:Senegal,SRB:Sırbistan,SLE:Sierra Leone,SVK:Slovakya,SVN:Slovenya,SLB:Solomon Adaları,SOM:Somali,SOL:Somaliland,ZAF:Güney Afrika,SSD:Güney Sudan,ESP:İspanya,LKA:Sri Lanka,SDN:Sudan,SUR:Surinam,SWZ:Esvatini,SWE:İsveç,CHE:İsviçre,SYR:Suriye,TWN:Tayvan,TJK:Tacikistan,TZA:Tanzanya,THA:Tayland,TLS:Doğu Timor,TGO:Togo,TTO:Trinidad ve Tobago,TUN:Tunus,TUR:Türkiye,TKM:Türkmenistan,UGA:Uganda,UKR:Ukrayna,ARE:Birleşik Arap Emirlikleri,GBR:Birleşik Krallık,USA:Amerika Birleşik Devletleri,URY:Uruguay,UZB:Özbekistan,VUT:Vanuatu,VEN:Venezuela,VNM:Vietnam,PSE:Filistin,ESH:Batı Sahra,YEM:Yemen,ZMB:Zambiya,ZWE:Zimbabve,BDI:Burundi,PYF:Fransız Polinezyası,KNA:Saint Kitts ve Nevis,MUS:Mauritius,SYC:Seyşeller"
+          .split(",")
+          .forEach(function (p) {
+            var i = p.indexOf(":");
+            TR[p.slice(0, i)] = p.slice(i + 1);
+          });
+        // Uluslararası yerçekimi formülü (enlem bazlı, deniz seviyesi)
+        function grav(lat) {
+          var s = Math.sin(lat * rad),
+            s2 = Math.sin(2 * lat * rad);
+          return 9.780327 * (1 + 0.0053024 * s * s - 0.0000058 * s2 * s2);
+        }
+        var col = d3.scale
+          .linear()
+          .domain([9.78, 9.832])
+          .range(["#3b82f6", "#f59e0b"])
+          .clamp(true);
+        feats.forEach(function (f) {
+          var c = d3.geo.centroid(f);
+          f.g = grav(c[1]);
+        });
+
+        var svg = d3.select("body").append("svg");
+        var defs = svg.append("defs");
+        var rg = defs
+          .append("radialGradient")
+          .attr("id", "sh")
+          .attr("cx", "35%")
+          .attr("cy", "35%")
+          .attr("r", "75%");
+        rg.append("stop").attr("offset", "0%").attr("stop-color", "#1b2a55");
+        rg.append("stop").attr("offset", "100%").attr("stop-color", "#050a1c");
+        var lg = defs
+          .append("radialGradient")
+          .attr("id", "gl")
+          .attr("cx", "35%")
+          .attr("cy", "35%")
+          .attr("r", "75%");
+        lg.append("stop")
+          .attr("offset", "0%")
+          .attr("stop-color", "#fff")
+          .attr("stop-opacity", 0.18);
+        lg.append("stop")
+          .attr("offset", "60%")
+          .attr("stop-color", "#fff")
+          .attr("stop-opacity", 0);
+        lg.append("stop")
+          .attr("offset", "100%")
+          .attr("stop-color", "#000")
+          .attr("stop-opacity", 0.45);
+
+        var proj = d3.geo.orthographic().clipAngle(90).rotate([-35, -20]);
+        var path = d3.geo.path().projection(proj);
+        var sphere = svg
+          .append("path")
+          .datum({ type: "Sphere" })
+          .attr("fill", "url(#sh)");
+        var grat = svg
+          .append("path")
+          .datum(d3.geo.graticule()())
+          .attr("fill", "none")
+          .attr("stroke", "#ffffff14")
+          .attr("stroke-width", 0.5);
+        var cs = svg
+          .selectAll(".c")
+          .data(feats)
+          .enter()
+          .append("path")
+          .attr("class", "c")
+          .attr("fill", function (d) {
+            return col(d.g);
+          });
+        var shine = svg
+          .append("path")
+          .datum({ type: "Sphere" })
+          .attr("fill", "url(#gl)")
+          .style("pointer-events", "none");
+        var tip = document.getElementById("tip");
+
+        function draw() {
+          sphere.attr("d", path);
+          grat.attr("d", path);
+          cs.attr("d", path);
+          shine.attr("d", path);
+        }
+        function resize() {
+          var w = innerWidth,
+            h = innerHeight,
+            s = Math.min(w, h - 60);
+          svg.attr("width", w).attr("height", h);
+          proj.scale((s / 2) * 0.86).translate([w / 2, h / 2 + 10]);
+          draw();
+        }
+        addEventListener("resize", resize);
+        resize();
+
+        cs.on("mouseover", function (d) {
+          tip.innerHTML =
+            "<b>" +
+            (TR[d.id] || d.properties.name) +
+            "</b><span>" +
+            d.g.toFixed(3) +
+            "</span> m/s²";
+          tip.style.display = "block";
+          hov = true;
+        })
+          .on("mousemove", function () {
+            var e = d3.event;
+            tip.style.left = Math.min(e.clientX + 14, innerWidth - 190) + "px";
+            tip.style.top = e.clientY + 14 + "px";
+          })
+          .on("mouseout", function () {
+            tip.style.display = "none";
+            hov = false;
+          });
+
+        var hov = false,
+          drag = false,
+          last = null,
+          auto = true;
+        svg.on("mousedown", st).on("touchstart", st);
+        function pt() {
+          var e = d3.event;
+          var t = (e.touches && e.touches[0]) || e;
+          return [t.clientX, t.clientY];
+        }
+        function st() {
+          drag = true;
+          last = pt();
+          svg.classed("drag", true);
+        }
+        d3.select(window)
+          .on("mousemove.g", mv)
+          .on("touchmove.g", mv)
+          .on("mouseup.g", en)
+          .on("touchend.g", en);
+        function mv() {
+          if (!drag) return;
+          var p = pt(),
+            r = proj.rotate(),
+            k = 0.25 * (100 / (proj.scale() / 3.2));
+          proj.rotate([
+            r[0] + (p[0] - last[0]) * k * 1.0,
+            Math.max(-80, Math.min(80, r[1] - (p[1] - last[1]) * k)),
+          ]);
+          last = p;
+          draw();
+        }
+        function en() {
+          drag = false;
+          svg.classed("drag", false);
+        }
+        d3.timer(function () {
+          if (auto && !drag && !hov) {
+            var r = proj.rotate();
+            proj.rotate([r[0] + 0.12, r[1]]);
+            draw();
+          }
+        });
+      })();
+    </script>
+  </body>
+</html>
